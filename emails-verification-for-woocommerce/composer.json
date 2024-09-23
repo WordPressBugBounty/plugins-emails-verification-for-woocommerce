@@ -1,0 +1,16 @@
+{
+  "repositories": [
+    {
+      "type": "vcs",
+      "url": "https://github.com/wpcodefactory/wpfactory-promoting-notice"
+    }
+  ],
+  "require": {
+    "wpfactory/wpfactory-promoting-notice": "*",
+    "hashids/hashids": "4.*"
+  },
+  "config": {
+    "preferred-install": "dist",
+    "platform-check": false
+  }
+}
