@@ -3,13 +3,13 @@
 Plugin Name: Email Verification for WooCommerce
 Plugin URI: https://wpfactory.com/item/email-verification-for-woocommerce/
 Description: Verify user emails in WooCommerce. Beautifully.
-Version: 2.9.0
+Version: 2.9.1
 Author: WPFactory
 Author URI: https://wpfactory.com
 Text Domain: emails-verification-for-woocommerce
 Domain Path: /langs
 Copyright: © 2024 WPFactory
-WC tested up to: 9.3
+WC tested up to: 9.4
 Requires Plugins: woocommerce
 License: GNU General Public License v3.0
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
@@ -39,6 +39,12 @@ if (
 	! alg_wc_ev_is_plugin_active( 'woocommerce/woocommerce.php' ) ||
 	( 'email-verification-for-woocommerce.php' === basename( __FILE__ ) && alg_wc_ev_is_plugin_active( 'email-verification-for-woocommerce-pro/email-verification-for-woocommerce-pro.php' ) )
 ) {
+	if ( function_exists( 'alg_wc_ev' ) ) {
+		$plugin = alg_wc_ev();
+		if ( method_exists( $plugin, 'set_free_version_filesystem_path' ) ) {
+			$plugin->set_free_version_filesystem_path( __FILE__ );
+		}
+	}
 	return;
 }
 
@@ -63,7 +69,7 @@ final class Alg_WC_Email_Verification {
 	 * @var   string
 	 * @since 1.0.0
 	 */
-	public $version = '2.9.0';
+	public $version = '2.9.1';
 
 	/**
 	 * @var   Alg_WC_Email_Verification The single instance of the class
@@ -79,6 +85,13 @@ final class Alg_WC_Email_Verification {
 	 * @since   1.9.5
 	 */
 	public $core;
+
+	/**
+	 * $free_version_file_system_path.
+	 *
+	 * @since 2.9.1
+	 */
+	protected $free_version_file_system_path;
 
 	/**
 	 * Main Alg_WC_Email_Verification Instance
@@ -100,7 +113,7 @@ final class Alg_WC_Email_Verification {
 	/**
 	 * Initializes the plugin.
 	 *
-	 * @version 2.9.0
+	 * @version 2.9.1
 	 * @since   1.0.0
 	 * @access  public
 	 */
@@ -113,6 +126,14 @@ final class Alg_WC_Email_Verification {
 
 		// Localization.
 		add_action( 'init', array( $this, 'localize' ) );
+
+		// Adds compatibility with HPOS.
+		add_action( 'before_woocommerce_init', function () {
+			$this->declare_compatibility_with_hpos( $this->get_filesystem_path() );
+			if ( ! empty( $this->get_free_version_filesystem_path() ) ) {
+				$this->declare_compatibility_with_hpos( $this->get_free_version_filesystem_path() );
+			}
+		} );
 
 		// Pro.
 		if ( 'email-verification-for-woocommerce-pro.php' === basename( __FILE__ ) ) {
@@ -129,6 +150,24 @@ final class Alg_WC_Email_Verification {
 
 		// Generate documentation.
 		add_filter( 'wpfpdh_documentation_params_' . plugin_basename( $this->get_filesystem_path() ), array( $this, 'handle_documentation_params' ), 10 );
+	}
+
+	/**
+	 * Declare compatibility with custom order tables for WooCommerce.
+	 *
+	 * @version 2.9.1
+	 * @since   2.9.1
+	 *
+	 * @param $filesystem_path
+	 *
+	 * @return void
+	 * @link    https://github.com/woocommerce/woocommerce/wiki/High-Performance-Order-Storage-Upgrade-Recipe-Book#declaring-extension-incompatibility
+	 *
+	 */
+	function declare_compatibility_with_hpos( $filesystem_path ) {
+		if ( class_exists( \Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {
+			\Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'custom_order_tables', $filesystem_path, true );
+		}
 	}
 
 	/**
@@ -314,6 +353,30 @@ final class Alg_WC_Email_Verification {
 		return __FILE__;
 	}
 
+	/**
+	 * get_free_version_filesystem_path.
+	 *
+	 * @version 2.9.1
+	 * @since   2.9.1
+	 *
+	 * @return mixed
+	 */
+	public function get_free_version_filesystem_path() {
+		return $this->free_version_file_system_path;
+	}
+
+	/**
+	 * set_free_version_filesystem_path.
+	 *
+	 * @version 2.9.1
+	 * @since   2.9.1
+	 *
+	 * @param   mixed  $free_version_file_system_path
+	 */
+	public function set_free_version_filesystem_path( $free_version_file_system_path ) {
+		$this->free_version_file_system_path = $free_version_file_system_path;
+	}
+
 }
 
 endif;
@@ -350,11 +413,5 @@ add_action( 'admin_init', function () use ( $activation_hook ) {
 	if ( is_admin() && get_option( $activation_hook ) === 'yes' ) {
 		delete_option( $activation_hook );
 		do_action( $activation_hook );
-	}
-} );
-
-add_action( 'before_woocommerce_init', function() {
-	if ( class_exists( \Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {
-		\Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'custom_order_tables', dirname(__FILE__), true );
 	}
 } );
