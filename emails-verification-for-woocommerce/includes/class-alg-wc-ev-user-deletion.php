@@ -2,7 +2,7 @@
 /**
  * Email Verification for WooCommerce - Users Deletion class.
  *
- * @version 2.8.0
+ * @version 3.1.9
  * @since   2.8.0
  * @author  WPFactory
  */
@@ -53,7 +53,7 @@ if ( ! class_exists( 'Alg_WC_Email_Verification_Users_Deletion' ) ) {
 		/**
 		 * Delete user.
 		 *
-		 * @version 2.8.0
+		 * @version 3.1.9
 		 * @since   2.8.0
 		 *
 		 * @param $args
@@ -73,7 +73,11 @@ if ( ! class_exists( 'Alg_WC_Email_Verification_Users_Deletion' ) ) {
 			$reassign_user_id    = ! empty( $args['reassign_user_id'] ) ? intval( $args['reassign_user_id'] ) : null;
 			$log                 = filter_var( $args['log'], FILTER_VALIDATE_BOOLEAN );
 			$delete_from_network = filter_var( $args['delete_from_network'], FILTER_VALIDATE_BOOLEAN );
-			if ( is_a( $user, 'WP_User' ) ) {
+
+			if (
+				is_a( $user, 'WP_User' ) &&
+				! alg_wc_ev()->core->is_user_role_skipped( $user )
+			) {
 				if ( $delete_from_network ) {
 					if ( ! function_exists( 'wpmu_delete_user' ) ) {
 						require_once ABSPATH . '/wp-admin/includes/ms.php';
@@ -107,14 +111,16 @@ if ( ! class_exists( 'Alg_WC_Email_Verification_Users_Deletion' ) ) {
 		/**
 		 * delete_unverified_users.
 		 *
-		 * @version 2.7.9
+		 * @version 3.1.9
 		 * @since   1.3.0
 		 * @todo    add "preview"
 		 */
 		function delete_unverified_users( $is_cron = false ) {
 			$current_user_id = ( function_exists( 'get_current_user_id' ) && 0 != get_current_user_id() ? get_current_user_id() : null );
-			// Args
+
+			// Args.
 			$args = array(
+				'fields'       => 'ID',
 				'role__not_in' => get_option( 'alg_wc_ev_skip_user_roles', array( 'administrator' ) ),
 				'exclude'      => ( $current_user_id ? array( $current_user_id ) : array() ),
 				'meta_query'   => array(
@@ -125,6 +131,19 @@ if ( ! class_exists( 'Alg_WC_Email_Verification_Users_Deletion' ) ) {
 					),
 				),
 			);
+
+			// Registration delay.
+			$delay_hours        = (int) get_option( 'alg_wc_ev_delete_users_registration_delay', 1 );
+			$cutoff             = gmdate( 'Y-m-d H:i:s', time() - HOUR_IN_SECONDS * $delay_hours );
+			$args['date_query'] = array(
+				array(
+					'before'    => $cutoff,
+					'column'    => 'user_registered',
+					'inclusive' => true,
+				),
+			);
+
+			// Checks current verified users.
 			if ( 'yes' === get_option( 'alg_wc_ev_verify_already_registered', 'no' ) ) {
 				$args['meta_query']['relation'] = 'OR';
 				$args['meta_query'][]           = array(
@@ -133,17 +152,25 @@ if ( ! class_exists( 'Alg_WC_Email_Verification_Users_Deletion' ) ) {
 					'compare' => 'NOT EXISTS',
 				);
 			}
+
+			// Filters get_users args.
 			$args = apply_filters( 'alg_wc_ev_delete_unverified_users_loop_args', $args, $current_user_id, $is_cron );
-			// Loop
+
+			// Users query.
+			$users_query = get_users( $args );
+
+			// Loop.
 			$total                  = 0;
-			$users_query            = get_users( $args );
 			$bkg_process_min_amount = get_option( 'alg_wc_ev_bkg_process_min_amount', 20 );
 			$perform_bkg_process    = $is_cron || count( $users_query ) >= $bkg_process_min_amount;
+
 			if ( $perform_bkg_process ) {
 				$this->delete_users_bkg_process->cancel_process();
-				foreach ( $users_query as $user ) {
-					$total ++;
-					$this->delete_users_bkg_process->push_to_queue( array( 'user_id' => $user->ID, 'current_user_id' => $current_user_id ) );
+				foreach ( $users_query as $user_id ) {
+					if ( ! alg_wc_ev()->core->is_user_verified_by_user_id( $user_id ) ) {
+						$total ++;
+						$this->delete_users_bkg_process->push_to_queue( array( 'user_id' => $user_id, 'current_user_id' => $current_user_id ) );
+					}
 				}
 				$this->delete_users_bkg_process->save()->dispatch();
 				if ( ! $is_cron ) {
@@ -154,15 +181,55 @@ if ( ! class_exists( 'Alg_WC_Email_Verification_Users_Deletion' ) ) {
 					WC_Admin_Settings::add_message( $message );
 				}
 			} else {
-				foreach ( $users_query as $user ) {
-					$this->delete_user( array(
-						'user'             => $user,
-						'reassign_user_id' => $current_user_id
-					) );
-					$total ++;
+				foreach ( $users_query as $user_id ) {
+					if ( ! alg_wc_ev()->core->is_user_verified_by_user_id( $user_id ) ) {
+						$this->delete_user( array(
+							'user_id'          => $user_id,
+							'reassign_user_id' => $current_user_id
+						) );
+						$total ++;
+					}
 				}
 				WC_Admin_Settings::add_message( sprintf( __( 'Total unverified users deleted: %d.', 'emails-verification-for-woocommerce' ), $total ) );
 			}
+		}
+
+		/**
+		 * get_users_without_required_meta.
+		 *
+		 * @version 3.1.9
+		 * @since   3.1.9
+		 *
+		 * @return array
+		 */
+		function get_users_without_required_meta() {
+			$users = array();
+			if (
+				! empty( $required_user_meta_raw = get_option( 'alg_wc_ev_required_user_meta' ) ) &&
+				! empty( $required_user_meta = array_filter( array_map( 'trim', preg_split( "/\r\n|\r|\n/", $required_user_meta_raw ) ) ) )
+			) {
+				$meta_keys    = $required_user_meta;
+				$placeholders = implode( ',', array_fill( 0, count( $meta_keys ), '%s' ) );
+
+				global $wpdb;
+
+				$sql = "
+				    SELECT DISTINCT u.ID
+				    FROM {$wpdb->users} u
+				    LEFT JOIN {$wpdb->usermeta} um
+				        ON um.user_id = u.ID
+				        AND um.meta_key IN ($placeholders)
+				    WHERE um.umeta_id IS NULL
+       				OR um.meta_value = ''
+				";
+
+				$users = array_map(
+					'intval',
+					$wpdb->get_col( $wpdb->prepare( $sql, ...$meta_keys ) )
+				);
+			}
+
+			return $users;
 		}
 
 		/**

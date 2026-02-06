@@ -2,7 +2,7 @@
 /**
  * Email Verification for WooCommerce - General Section Settings
  *
- * @version 2.9.3
+ * @version 3.1.9
  * @since   1.0.0
  * @author  WPFactory
  */
@@ -28,7 +28,7 @@ class Alg_WC_Email_Verification_Settings_General extends Alg_WC_Email_Verificati
 	/**
 	 * get_settings.
 	 *
-	 * @version 2.9.3
+	 * @version 3.1.9
 	 * @since   1.0.0
 	 * @todo    [next] Logout unverified users on every page: better description
 	 * @todo    [next] (maybe) `alg_wc_ev_delay_wc_email`: default to `yes`?
@@ -55,6 +55,15 @@ class Alg_WC_Email_Verification_Settings_General extends Alg_WC_Email_Verificati
 				'default'  => 'yes',
 			),
 			array(
+				'title'             => __( 'Verification parameter', 'emails-verification-for-woocommerce' ),
+				'desc'              => sprintf( __( 'Ex: <code>%s</code>', 'emails-verification-for-woocommerce' ), alg_wc_ev()->core->emails->get_verification_url( array( 'user_id' => get_current_user_id(), 'code' => 'a' ) ) ),
+				'desc_tip'          => __( 'The parameter used on the URL to verify the user account.', 'emails-verification-for-woocommerce' ),
+				'custom_attributes' => apply_filters( 'alg_wc_ev_settings', array( 'disabled' => 'disabled' ) ),
+				'type'              => 'text',
+				'id'                => 'alg_wc_ev_verification_parameter',
+				'default'           => 'alg_wc_ev_verify_email',
+			),
+			array(
 				'title'    => __( 'Login on activation', 'emails-verification-for-woocommerce' ),
 				'desc'     => __( 'Login the user automatically after the account is verified', 'emails-verification-for-woocommerce' ),
 				'type'     => 'checkbox',
@@ -79,18 +88,9 @@ class Alg_WC_Email_Verification_Settings_General extends Alg_WC_Email_Verificati
 				'default'       => 'yes',
 			),
 			array(
-				'type'     => 'sectionend',
-				'id'       => 'alg_wc_ev_general_options',
-			),
-			array(
-				'title'    => __( 'Account verification', 'emails-verification-for-woocommerce' ),
-				'type'     => 'title',
-				'id'       => 'alg_wc_ev_account_verification',
-			),
-			array(
-				'title'    => __( 'Current registered users', 'emails-verification-for-woocommerce' ),
-				'desc'     => __( 'Verify account for current users', 'emails-verification-for-woocommerce' ),
-				'desc_tip' => __( 'If enabled, all your current unverified users will have to verify their accounts.', 'emails-verification-for-woocommerce' ),
+				'title'    => __( 'Pre-plugin users', 'emails-verification-for-woocommerce' ),
+				'desc'     => __( 'Demand pre-plugin users to verify account', 'emails-verification-for-woocommerce' ),
+				'desc_tip' => __( 'If enabled, all your current unverified users created before the plugin was active will have to verify their accounts.', 'emails-verification-for-woocommerce' ),
 				'type'     => 'checkbox',
 				'id'       => 'alg_wc_ev_verify_already_registered',
 				'default'  => 'no',
@@ -104,33 +104,6 @@ class Alg_WC_Email_Verification_Settings_General extends Alg_WC_Email_Verificati
 				'id'       => 'alg_wc_ev_skip_user_roles',
 				'default'  => array( 'administrator' ),
 				'class'    => 'chosen_select',
-			),
-			array(
-				'desc'              => 'Message displayed after the email has been changed.',
-				'custom_attributes' => '',
-				'type'              => 'text',
-				'id'                => 'alg_wc_ev_unverify_email_changing_msg',
-				'default'           => __( 'Your email has been changed. In order to verify your account please check the activation email that was sent to your new email.', 'emails-verification-for-woocommerce' ),
-			),
-			array(
-				'title'             => __( 'Verification parameter', 'emails-verification-for-woocommerce' ),
-				'desc'              => sprintf( __( 'Ex: <code>%s</code>', 'emails-verification-for-woocommerce' ), alg_wc_ev()->core->emails->get_verification_url( array( 'user_id' => get_current_user_id(), 'code' => 'a' ) ) ),
-				'desc_tip'          => __( 'The parameter used on the URL to verify the user account.', 'emails-verification-for-woocommerce' ),
-				'custom_attributes' => apply_filters( 'alg_wc_ev_settings', array( 'disabled' => 'disabled' ) ),
-				'type'              => 'text',
-				'id'                => 'alg_wc_ev_verification_parameter',
-				'default'           => 'alg_wc_ev_verify_email',
-			),
-			array(
-				'type'     => 'sectionend',
-				'id'       => 'alg_wc_ev_account_verification',
-			),
-			array(
-				'title'    => __( 'Verification info', 'emails-verification-for-woocommerce' ),
-				'desc'     => __( 'Prepare verification information to users, including the verification status and a link to resend the verification email.', 'emails-verification-for-woocommerce' ).' '.
-				$this->get_block_unverify_login_option_warning(),
-				'type'     => 'title',
-				'id'       => 'alg_wc_ev_verification_info',
 			),
 			array(
 				'title'             => __( 'Password reset', 'emails-verification-for-woocommerce' ),
@@ -158,6 +131,36 @@ class Alg_WC_Email_Verification_Settings_General extends Alg_WC_Email_Verificati
 				'type'              => 'checkbox',
 				'id'                => 'alg_wc_ev_unverify_email_changing',
 				'default'           => 'no',
+			),
+			array(
+				'desc'              => 'Message displayed after the email has been changed.',
+				'custom_attributes' => '',
+				'type'              => 'text',
+				'id'                => 'alg_wc_ev_unverify_email_changing_msg',
+				'default'           => __( 'Your email has been changed. In order to verify your account please check the activation email that was sent to your new email.', 'emails-verification-for-woocommerce' ),
+			),
+			array(
+				'title'             => __( 'Required user meta', 'emails-verification-for-woocommerce' ),
+				'desc'              => __( 'Required user meta for verification.', 'emails-verification-for-woocommerce' ).' '.
+				                       __( 'Use one meta per line.', 'emails-verification-for-woocommerce' ),
+				'desc_tip'          => __( 'Users with empty required meta won\'t be able to verify their accounts.', 'emails-verification-for-woocommerce' ),
+				'type'              => 'textarea',
+				'css'               => 'width:100%;height:83px;',
+				'id'                => 'alg_wc_ev_required_user_meta',
+				'custom_attributes' => apply_filters( 'alg_wc_ev_settings', array( 'readonly' => 'readonly' ) ),
+				'alg_wc_ev_raw'     => true,
+				'default'           => '',
+			),
+			array(
+				'type'     => 'sectionend',
+				'id'       => 'alg_wc_ev_general_options',
+			),
+			array(
+				'title'    => __( 'Verification info', 'emails-verification-for-woocommerce' ),
+				'desc'     => __( 'Prepare verification information to users, including the verification status and a link to resend the verification email.', 'emails-verification-for-woocommerce' ).' '.
+				$this->get_block_unverify_login_option_warning(),
+				'type'     => 'title',
+				'id'       => 'alg_wc_ev_verification_info',
 			),
 			array(
 				'title'    => __( 'My Account page', 'emails-verification-for-woocommerce' ),
@@ -275,7 +278,7 @@ class Alg_WC_Email_Verification_Settings_General extends Alg_WC_Email_Verificati
 			array(
 				'title' => __( 'Redirect on failure', 'emails-verification-for-woocommerce' ),
 				'type'  => 'title',
-				'desc'  => __( 'Redirects customers after unsuccessful verification.', 'emails-verification-for-woocommerce' ) . '<br />' .
+				'desc'  => __( 'Redirects to a custom URL if an unverified user tries to login, including after a password reset.', 'emails-verification-for-woocommerce' ) . '<br /><br />' .
 				           sprintf( __( 'This will also append a %s argument to the URL that could help you displaying the error message in case you have issues with that.', 'emails-verification-for-woocommerce' ), '<code>' . '?alg_wc_ev_email_verified_error' . '</code>' ),
 				'id'    => 'alg_wc_ev_redirect_on_failure_options',
 			),
